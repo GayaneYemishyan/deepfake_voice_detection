@@ -1,0 +1,9 @@
+gradio
+librosa
+spafe
+torch
+numpy
+joblib
+lightgbm
+xgboost
+scikit-learn
