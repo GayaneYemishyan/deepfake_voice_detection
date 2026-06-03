@@ -1,9 +1,7 @@
-gradio
-librosa
-spafe
-torch
-numpy
-joblib
-lightgbm
-xgboost
-scikit-learn
+flask>=2.3
+flask-cors>=4.0
+torch>=2.0
+librosa>=0.10
+numpy>=1.24
+werkzeug>=2.3
+joblib>=1.3

@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoiceShield — Deepfake Voice Detector</title>
+  <link rel="icon" type="image/png" href="/static/logo.png" />
+  <link rel="apple-touch-icon" href="/static/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream: #FAF8F3;
+      --cream-mid: #F2EFE7;
+      --cream-dark: #E8E3D8;
+      --ink: #1C1A16;
+      --ink-muted: #6B6760;
+      --ink-faint: #A09D98;
+      --accent: #2E4A3E;
+      --accent-light: #EBF0ED;
+      --danger: #8B2020;
+      --danger-light: #F5EAEA;
+      --success: #1A4A2E;
+      --success-light: #EAF5EE;
+      --border: rgba(28, 26, 22, 0.12);
+      --border-strong: rgba(28, 26, 22, 0.22);
+      --radius: 12px;
+      --radius-sm: 6px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(250, 248, 243, 0.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2.5rem;
+      height: 60px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.15rem;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .nav-logo { width: 32px; height: 32px; object-fit: contain; display: block; }
+    .nav-links { display: flex; gap: 2rem; list-style: none; }
+    .nav-links a {
+      font-size: 0.82rem; font-weight: 400;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--ink-muted); text-decoration: none; transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--ink); }
+
+    .hero {
+      padding: 5rem 2.5rem 3rem;
+      max-width: 720px;
+      margin: 0 auto;
+      text-align: center;
+      animation: fadeUp 0.7s ease both;
+    }
+    .hero-eyebrow {
+      font-size: 0.78rem; font-weight: 500;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--accent); margin-bottom: 1.2rem;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .hero-eyebrow::before, .hero-eyebrow::after {
+      content: ''; display: block; width: 24px; height: 1px;
+      background: var(--accent); opacity: 0.5;
+    }
+    h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2.4rem, 5vw, 3.4rem);
+      font-weight: 400; line-height: 1.12; color: var(--ink); margin-bottom: 1.2rem;
+    }
+    h1 em { font-style: italic; color: var(--accent); }
+    .hero-sub {
+      font-size: 1rem; font-weight: 300; line-height: 1.7;
+      color: var(--ink-muted); max-width: 480px; margin: 0 auto;
+    }
+
+    main { flex: 1; max-width: 860px; margin: 0 auto; width: 100%; padding: 0 2rem 5rem; }
+
+    .upload-card {
+      background: #fff; border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+      margin-bottom: 1.5rem;
+      animation: fadeUp 0.7s 0.15s ease both;
+    }
+
+    .tab-bar { display: flex; border-bottom: 1px solid var(--border); }
+    .tab-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 0.85rem 1rem;
+      font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 500;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      color: var(--ink-muted); background: var(--cream-mid);
+      border: none; cursor: pointer;
+      transition: background 0.18s, color 0.18s;
+      border-right: 1px solid var(--border);
+    }
+    .tab-btn:last-child { border-right: none; }
+    .tab-btn svg { width: 15px; height: 15px; stroke: currentColor; flex-shrink: 0; }
+    .tab-btn.active { background: #fff; color: var(--accent); }
+    .tab-btn:hover:not(.active) { background: var(--cream); }
+
+    .tab-panel { display: none; padding: 2.5rem; }
+    .tab-panel.active { display: block; }
+
+    .drop-zone {
+      border: 1.5px dashed var(--cream-dark); border-radius: var(--radius);
+      padding: 3rem 2rem; text-align: center; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s; position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: var(--accent-light); }
+    .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .drop-icon { width: 48px; height: 48px; margin: 0 auto 1rem; border-radius: 50%; background: var(--cream-mid); display: flex; align-items: center; justify-content: center; }
+    .drop-icon svg { width: 22px; height: 22px; stroke: var(--ink-muted); }
+    .drop-label { font-size: 0.92rem; font-weight: 400; color: var(--ink); margin-bottom: 0.35rem; }
+    .drop-label strong { font-weight: 500; }
+    .drop-sub { font-size: 0.78rem; color: var(--ink-faint); letter-spacing: 0.02em; }
+
+    .file-chip { display: none; align-items: center; gap: 12px; background: var(--cream-mid); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-top: 1.2rem; }
+    .file-chip.visible { display: flex; }
+    .file-chip-icon { width: 36px; height: 36px; border-radius: 8px; background: var(--cream-dark); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .file-chip-icon svg { width: 16px; height: 16px; stroke: var(--ink-muted); }
+    .file-chip-name { font-size: 0.85rem; font-weight: 500; color: var(--ink); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-chip-remove { width: 28px; height: 28px; border-radius: 50%; background: transparent; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--ink-faint); transition: background 0.15s, color 0.15s; }
+    .file-chip-remove:hover { background: var(--cream-dark); color: var(--ink); }
+    .file-chip-remove svg { width: 14px; height: 14px; stroke: currentColor; }
+
+    .audio-wrap { display: none; margin-top: 1.2rem; }
+    .audio-wrap.visible { display: block; }
+    audio { width: 100%; height: 36px; border-radius: var(--radius-sm); outline: none; }
+
+    .record-area { display: flex; flex-direction: column; align-items: center; gap: 1.6rem; }
+    .rec-btn-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
+    .rec-pulse { position: absolute; width: 80px; height: 80px; border-radius: 50%; background: var(--danger); opacity: 0; pointer-events: none; }
+    .rec-pulse.active { animation: pulse-ring 1.4s ease-out infinite; }
+    @keyframes pulse-ring { 0% { transform: scale(0.9); opacity: 0.35; } 100% { transform: scale(1.9); opacity: 0; } }
+    .rec-btn { position: relative; width: 72px; height: 72px; border-radius: 50%; border: 1.5px solid var(--border-strong); cursor: pointer; display: flex; align-items: center; justify-content: center; background: var(--cream-mid); transition: background 0.2s, border-color 0.2s, transform 0.15s; z-index: 1; }
+    .rec-btn:hover { transform: scale(1.04); }
+    .rec-btn svg { width: 26px; height: 26px; stroke: var(--ink-muted); transition: stroke 0.2s; }
+    .rec-btn.recording { background: var(--danger-light); border-color: var(--danger); }
+    .rec-btn.recording svg { stroke: var(--danger); }
+    .rec-timer { font-family: 'DM Serif Display', serif; font-size: 2.6rem; font-weight: 400; color: var(--ink); letter-spacing: 0.02em; line-height: 1; min-width: 5ch; text-align: center; }
+    .rec-timer.active { color: var(--danger); }
+    .rec-status { font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); font-weight: 500; }
+    .rec-status.active { color: var(--danger); }
+    .rec-canvas-wrap { width: 100%; height: 52px; border-radius: var(--radius-sm); background: var(--cream-mid); overflow: hidden; display: flex; align-items: center; }
+    canvas#waveCanvas { width: 100%; height: 100%; display: block; }
+    .rec-playback { display: none; width: 100%; flex-direction: column; gap: 0.8rem; }
+    .rec-playback.visible { display: flex; }
+    .rec-playback-label { font-size: 0.72rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+    .rec-playback-row { display: flex; align-items: center; gap: 10px; }
+    .rec-playback-row audio { flex: 1; height: 36px; }
+    .rec-discard { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border-strong); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--ink-faint); flex-shrink: 0; transition: background 0.15s, color 0.15s; }
+    .rec-discard:hover { background: var(--danger-light); color: var(--danger); border-color: transparent; }
+    .rec-discard svg { width: 14px; height: 14px; stroke: currentColor; }
+
+    .card-footer { padding: 0 2.5rem 2.5rem; }
+    .btn-analyze { display: block; width: 100%; padding: 0.9rem; background: var(--accent); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; border: none; border-radius: var(--radius-sm); cursor: pointer; transition: opacity 0.2s, transform 0.15s; }
+    .btn-analyze:hover { opacity: 0.88; }
+    .btn-analyze:active { transform: scale(0.99); }
+    .btn-analyze:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .progress-wrap { display: none; margin-bottom: 1rem; height: 3px; background: var(--cream-dark); border-radius: 99px; overflow: hidden; }
+    .progress-wrap.visible { display: block; }
+    .progress-bar { height: 100%; background: var(--accent); border-radius: 99px; width: 0%; transition: width 0.4s ease; }
+
+    .error-banner { display: none; background: var(--danger-light); border: 1px solid rgba(139,32,32,0.2); border-radius: var(--radius-sm); padding: 0.8rem 1rem; margin-bottom: 1rem; font-size: 0.82rem; color: var(--danger); }
+    .error-banner.visible { display: block; }
+
+    .result-panel { display: none; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; animation: fadeUp 0.5s ease both; margin-bottom: 1.5rem; }
+    .result-panel.visible { display: block; }
+
+    .result-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 1rem; }
+    .result-verdict-badge { padding: 0.4rem 1rem; border-radius: 99px; font-size: 0.8rem; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; }
+    .badge-fake { background: var(--danger-light); color: var(--danger); }
+    .badge-real { background: var(--success-light); color: var(--success); }
+    .result-headline { font-family: 'DM Serif Display', serif; font-size: 1.65rem; font-style: italic; font-weight: 400; color: var(--ink); line-height: 1.2; }
+
+    .result-body { padding: 1.5rem 2rem; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--border); }
+    .result-metric { background: #fff; padding: 1.2rem 1.5rem; }
+    .result-metric-label { font-size: 0.72rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 0.4rem; }
+    .result-metric-value { font-family: 'DM Mono', monospace; font-size: 1.4rem; font-weight: 300; color: var(--ink); line-height: 1.1; letter-spacing: -0.01em; }
+    .result-metric-unit { font-size: 0.75rem; color: var(--ink-muted); margin-top: 0.2rem; }
+
+    .prob-section { padding: 1.5rem 2rem; border-top: 1px solid var(--border); }
+    .prob-label-row { display: flex; justify-content: space-between; margin-bottom: 0.6rem; }
+    .prob-label-row span { font-size: 0.78rem; letter-spacing: 0.04em; color: var(--ink-muted); }
+    .prob-track { height: 6px; background: var(--cream-mid); border-radius: 99px; overflow: hidden; margin-bottom: 0.5rem; }
+    .prob-fill { height: 100%; border-radius: 99px; transition: width 0.8s cubic-bezier(.2,.8,.2,1); }
+    .prob-fill.fake { background: var(--danger); }
+    .prob-fill.real { background: var(--success); }
+    .prob-detail { font-size: 0.76rem; color: var(--ink-faint); font-family: 'DM Mono', monospace; letter-spacing: -0.01em; }
+
+    .timeline-section {
+      padding: 1.5rem 2rem;
+      border-top: 1px solid var(--border);
+    }
+    .subsection-title {
+      font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--ink-faint); margin-bottom: 1rem;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .subsection-title .loading-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent); opacity: 0;
+      animation: blink 1s ease infinite;
+    }
+    @keyframes blink { 0%,100% { opacity:0; } 50% { opacity:1; } }
+
+    .timeline-canvas-wrap {
+      width: 100%; height: 110px;
+      background: var(--cream-mid);
+      border-radius: var(--radius-sm);
+      overflow: hidden; position: relative;
+    }
+    canvas#timelineCanvas { width: 100%; height: 100%; display: block; }
+    .timeline-axis {
+      display: flex; justify-content: space-between;
+      margin-top: 0.4rem;
+      font-family: 'DM Mono', monospace; font-size: 0.68rem;
+      color: var(--ink-faint);
+    }
+    .timeline-legend {
+      display: flex; gap: 1.2rem; margin-top: 0.6rem;
+      font-size: 0.72rem; color: var(--ink-muted); align-items: center;
+    }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .legend-dot.fake { background: var(--danger); }
+    .legend-dot.real { background: var(--success); }
+    .timeline-loading {
+      display: flex; align-items: center; justify-content: center;
+      height: 110px; font-size: 0.82rem; color: var(--ink-faint);
+      gap: 8px;
+    }
+
+    .timeline-cursor {
+      position: absolute; top: 0; bottom: 0; width: 2px;
+      background: var(--accent); opacity: 0; pointer-events: none;
+      transition: opacity 0.15s;
+    }
+    .timeline-cursor.active { opacity: 0.7; }
+    .how-section { animation: fadeUp 0.7s 0.3s ease both; }
+    .section-title { font-size: 0.72rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 1.2rem; padding-bottom: 0.8rem; border-bottom: 1px solid var(--border); }
+    .how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .how-item { background: #fff; padding: 1.5rem; }
+    .how-num { font-family: 'DM Serif Display', serif; font-size: 2rem; color: var(--cream-dark); margin-bottom: 0.6rem; line-height: 1; }
+    .how-title { font-size: 0.85rem; font-weight: 500; color: var(--ink); margin-bottom: 0.4rem; }
+    .how-desc { font-size: 0.78rem; line-height: 1.65; color: var(--ink-muted); font-weight: 300; }
+
+    footer { border-top: 1px solid var(--border); padding: 1.5rem 2.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .footer-copy { font-size: 0.78rem; color: var(--ink-faint); }
+    .footer-badge { font-size: 0.72rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); border: 1px solid var(--border-strong); border-radius: 99px; padding: 0.3rem 0.8rem; }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+
+    @media (max-width: 600px) {
+      nav { padding: 0 1.2rem; }
+      .nav-links { display: none; }
+      .hero { padding: 3rem 1.2rem 2rem; }
+      main { padding: 0 1.2rem 4rem; }
+      .result-body { grid-template-columns: 1fr; }
+      .how-grid { grid-template-columns: 1fr; }
+      footer { flex-direction: column; gap: 0.6rem; text-align: center; }
+      .tab-panel, .card-footer { padding-left: 1.2rem; padding-right: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="#">
+    <img src="/static/logo.png" alt="VoiceShield logo" class="nav-logo" />
+    VoiceShield
+  </a>
+  <ul class="nav-links">
+  </ul>
+</nav>
+
+<div class="hero">
+  <span class="hero-eyebrow">AI Audio Detection</span>
+  <h1>Is this voice <em>real</em>?</h1>
+  <p class="hero-sub">Upload an audio file or record directly — our model analyses 227 acoustic features to determine whether the voice is human or AI-generated, with per-second breakdown and feature explanation.</p>
+</div>
+
+<main>
+
+  <div class="upload-card">
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tabUploadBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 15V3m0 0L8 7m4-4l4 4"/>
+          <path d="M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17"/>
+        </svg>
+        Upload File
+      </button>
+      <button class="tab-btn" id="tabRecordBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="2" width="6" height="12" rx="3"/>
+          <path d="M5 10a7 7 0 0014 0"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+          <line x1="8"  y1="22" x2="16" y2="22"/>
+        </svg>
+        Record Voice
+      </button>
+    </div>
+
+    <div class="tab-panel active" id="panelUpload">
+      <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Upload audio file.">
+        <input type="file" id="fileInput" accept="audio/*" aria-label="Choose audio file" />
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 15V3m0 0L8 7m4-4l4 4"/>
+            <path d="M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17"/>
+          </svg>
+        </div>
+        <p class="drop-label"><strong>Drop audio here</strong> or click to browse</p>
+        <p class="drop-sub">WAV · MP3 · FLAC · OGG · M4A · AAC · OPUS · WEBM</p>
+      </div>
+      <div class="file-chip" id="fileChip">
+        <div class="file-chip-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18V5l12-2v13"/>
+            <circle cx="6" cy="18" r="3"/>
+            <circle cx="18" cy="16" r="3"/>
+          </svg>
+        </div>
+        <span class="file-chip-name" id="chipName">—</span>
+        <button class="file-chip-remove" id="removeFile" aria-label="Remove selected file">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="audio-wrap" id="audioWrap">
+        <audio id="audioPlayer" controls aria-label="Uploaded audio preview"></audio>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panelRecord">
+      <div class="record-area">
+        <div class="rec-timer" id="recTimer">0:00</div>
+        <div class="rec-btn-wrap">
+          <div class="rec-pulse" id="recPulse"></div>
+          <button class="rec-btn" id="recBtn" aria-label="Start recording">
+            <svg id="iconMic" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="2" width="6" height="12" rx="3"/>
+              <path d="M5 10a7 7 0 0014 0"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+              <line x1="8"  y1="22" x2="16" y2="22"/>
+            </svg>
+            <svg id="iconStop" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+              <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>
+            </svg>
+          </button>
+        </div>
+        <span class="rec-status" id="recStatus">Click to start recording</span>
+        <div class="rec-canvas-wrap">
+          <canvas id="waveCanvas"></canvas>
+        </div>
+        <div class="rec-playback" id="recPlayback">
+          <span class="rec-playback-label">Recorded clip</span>
+          <div class="rec-playback-row">
+            <audio id="recAudio" controls aria-label="Recorded audio clip"></audio>
+            <button class="rec-discard" id="recDiscard" aria-label="Discard recording">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10"/>
+                <path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-footer">
+      <div class="error-banner" id="errorBanner"></div>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <button class="btn-analyze" id="analyzeBtn" disabled>Analyse Audio</button>
+    </div>
+  </div>
+
+  <div class="result-panel" id="resultPanel">
+    <div class="result-header">
+      <span class="result-verdict-badge" id="verdictBadge"></span>
+      <span class="result-headline" id="resultHeadline"></span>
+    </div>
+    <div class="result-body">
+      <div class="result-metric">
+        <div class="result-metric-label">Verdict</div>
+        <div class="result-metric-value" id="metricVerdict">—</div>
+        <div class="result-metric-unit">Classification</div>
+      </div>
+      <div class="result-metric">
+        <div class="result-metric-label">Confidence</div>
+        <div class="result-metric-value" id="metricConf">—</div>
+        <div class="result-metric-unit">Confidence in verdict</div>
+      </div>
+      <div class="result-metric">
+        <div class="result-metric-label">Threshold</div>
+        <div class="result-metric-value" id="metricThresh">—</div>
+        <div class="result-metric-unit">Decision boundary</div>
+      </div>
+    </div>
+    <div class="prob-section">
+      <div class="prob-label-row">
+        <span>Real</span>
+        <span>Fake</span>
+      </div>
+      <div class="prob-track">
+        <div class="prob-fill" id="probFill" style="width:0%"></div>
+      </div>
+      <div class="prob-detail" id="probDetail"></div>
+    </div>
+
+    <div class="timeline-section">
+      <div class="subsection-title">
+        Fakeness Over Time
+        <div class="loading-dot" id="timelineDot"></div>
+      </div>
+      <div class="timeline-canvas-wrap">
+        <div class="timeline-loading" id="timelineLoading">
+          <span>Analysing windows…</span>
+        </div>
+        <canvas id="timelineCanvas" style="display:none"></canvas>
+        <div class="timeline-cursor" id="timelineCursor"></div>
+      </div>
+      <div class="timeline-axis" id="timelineAxis"></div>
+      <div class="timeline-legend">
+        <span class="legend-dot real"></span><span>Real</span>
+        <span class="legend-dot fake"></span><span>Fake</span>
+        <span style="margin-left:auto;font-family:'DM Mono',monospace;font-size:0.68rem;color:var(--ink-faint)" id="timelineMeta"></span>
+      </div>
+    </div>
+
+  <div class="how-section" id="how">
+    <div class="section-title">How it works</div>
+    <div class="how-grid">
+      <div class="how-item">
+        <div class="how-num">01</div>
+        <div class="how-title">Feature Extraction</div>
+        <div class="how-desc">227 acoustic features — MFCCs, delta-MFCCs, spectral centroid, chroma, tonnetz, F0, GFCC, LFCC, HNR and more — extracted using librosa.</div>
+      </div>
+      <div class="how-item">
+        <div class="how-num">02</div>
+        <div class="how-title">Temporal Analysis</div>
+        <div class="how-desc">Audio is split into overlapping 2-second windows. Each window is scored independently to reveal where in the recording synthetic artifacts appear.</div>
+      </div>
+      <div class="how-item">
+        <div class="how-num">03</div>
+        <div class="how-title">MLP Inference</div>
+        <div class="how-desc">A 4-layer MLP (512→256→128→64) with BatchNorm and GELU activations produces a fake-probability score, fully consistent with the per-second timeline chart.</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <span class="footer-copy">VoiceShield · Deepfake Audio Detection</span>
+  <span class="footer-badge">MLP · PyTorch · 227 features</span>
+</footer>
+
+<script>
+  const tabUploadBtn  = document.getElementById('tabUploadBtn');
+  const tabRecordBtn  = document.getElementById('tabRecordBtn');
+  const panelUpload   = document.getElementById('panelUpload');
+  const panelRecord   = document.getElementById('panelRecord');
+  const dropZone      = document.getElementById('dropZone');
+  const fileInput     = document.getElementById('fileInput');
+  const fileChip      = document.getElementById('fileChip');
+  const chipName      = document.getElementById('chipName');
+  const removeFile    = document.getElementById('removeFile');
+  const audioWrap     = document.getElementById('audioWrap');
+  const audioPlayer   = document.getElementById('audioPlayer');
+  const recBtn        = document.getElementById('recBtn');
+  const recPulse      = document.getElementById('recPulse');
+  const recTimer      = document.getElementById('recTimer');
+  const recStatus     = document.getElementById('recStatus');
+  const recPlayback   = document.getElementById('recPlayback');
+  const recAudio      = document.getElementById('recAudio');
+  const recDiscard    = document.getElementById('recDiscard');
+  const waveCanvas    = document.getElementById('waveCanvas');
+  const iconMic       = document.getElementById('iconMic');
+  const iconStop      = document.getElementById('iconStop');
+  const analyzeBtn    = document.getElementById('analyzeBtn');
+  const progressWrap  = document.getElementById('progressWrap');
+  const progressBar   = document.getElementById('progressBar');
+  const resultPanel   = document.getElementById('resultPanel');
+  const errorBanner   = document.getElementById('errorBanner');
+
+  const timelineCanvas  = document.getElementById('timelineCanvas');
+  const timelineLoading = document.getElementById('timelineLoading');
+  const timelineAxis    = document.getElementById('timelineAxis');
+  const timelineMeta    = document.getElementById('timelineMeta');
+  const timelineDot     = document.getElementById('timelineDot');
+  const timelineCursor  = document.getElementById('timelineCursor');
+
+  const BASE_URL = 'http://localhost:7860';
+
+  let selectedFile    = null;
+  let activeTab       = 'upload';
+  let mediaRecorder   = null;
+  let recordedChunks  = [];
+  let recordingActive = false;
+  let timerInterval   = null;
+  let timerSeconds    = 0;
+  let audioCtx        = null;
+  let analyserNode    = null;
+  let waveAnimId      = null;
+  let micStream       = null;
+  let lastTimelineData = null;
+  let cursorRAF        = null;
+
+  tabUploadBtn.addEventListener('click', () => switchTab('upload'));
+  tabRecordBtn.addEventListener('click', () => switchTab('record'));
+
+  function switchTab(tab) {
+    activeTab = tab;
+    tabUploadBtn.classList.toggle('active', tab === 'upload');
+    tabRecordBtn.classList.toggle('active', tab === 'record');
+    panelUpload.classList.toggle('active', tab === 'upload');
+    panelRecord.classList.toggle('active', tab === 'record');
+    hideError();
+    resultPanel.classList.remove('visible');
+  }
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) setUploadFile(f);
+  });
+  dropZone.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) setUploadFile(fileInput.files[0]); });
+
+  function setUploadFile(f) {
+    selectedFile = f;
+    chipName.textContent = f.name;
+    fileChip.classList.add('visible');
+    audioPlayer.src = URL.createObjectURL(f);
+    audioWrap.classList.add('visible');
+    analyzeBtn.disabled = false;
+    resultPanel.classList.remove('visible');
+    hideError();
+  }
+
+  removeFile.addEventListener('click', () => {
+    selectedFile = null;
+    fileInput.value = '';
+    fileChip.classList.remove('visible');
+    audioWrap.classList.remove('visible');
+    audioPlayer.src = '';
+    analyzeBtn.disabled = true;
+    resultPanel.classList.remove('visible');
+    hideError();
+  });
+
+  recBtn.addEventListener('click', async () => {
+    if (!recordingActive) await startRecording(); else stopRecording();
+  });
+
+  async function startRecording() {
+    hideError();
+    try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); }
+    catch (err) { showError('Microphone access denied.'); return; }
+
+    recPlayback.classList.remove('visible');
+    recAudio.src = '';
+    selectedFile = null;
+    analyzeBtn.disabled = true;
+    resultPanel.classList.remove('visible');
+    recordedChunks = [];
+
+    const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg','']
+      .find(m => m === '' || MediaRecorder.isTypeSupported(m));
+    mediaRecorder = new MediaRecorder(micStream, mimeType ? { mimeType } : {});
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = onRecordingStop;
+    mediaRecorder.start(100);
+
+    timerSeconds = 0;
+    updateTimerDisplay();
+    timerInterval = setInterval(() => {
+      timerSeconds++;
+      updateTimerDisplay();
+      if (timerSeconds >= 60) stopRecording();
+    }, 1000);
+
+    startWaveform(micStream);
+
+    recordingActive = true;
+    recBtn.classList.add('recording');
+    recPulse.classList.add('active');
+    iconMic.style.display  = 'none';
+    iconStop.style.display = '';
+    recTimer.classList.add('active');
+    recStatus.textContent = 'Recording… click to stop';
+    recStatus.classList.add('active');
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    micStream.getTracks().forEach(t => t.stop());
+    clearInterval(timerInterval);
+    stopWaveform();
+    recordingActive = false;
+    recBtn.classList.remove('recording');
+    recPulse.classList.remove('active');
+    iconMic.style.display  = '';
+    iconStop.style.display = 'none';
+    recTimer.classList.remove('active');
+    recStatus.textContent = 'Click to start recording';
+    recStatus.classList.remove('active');
+  }
+
+  function onRecordingStop() {
+    const mimeType = mediaRecorder.mimeType || 'audio/webm';
+    const blob = new Blob(recordedChunks, { type: mimeType });
+    const ext  = mimeType.includes('ogg') ? 'ogg' : 'webm';
+    selectedFile = new File([blob], `recording.${ext}`, { type: mimeType });
+    recAudio.src = URL.createObjectURL(blob);
+    recPlayback.classList.add('visible');
+    analyzeBtn.disabled = false;
+  }
+
+  recDiscard.addEventListener('click', () => {
+    recAudio.src = ''; recPlayback.classList.remove('visible');
+    selectedFile = null; analyzeBtn.disabled = true;
+    timerSeconds = 0; updateTimerDisplay();
+    resultPanel.classList.remove('visible'); hideError();
+    const ctx = waveCanvas.getContext('2d');
+    ctx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+  });
+
+  function updateTimerDisplay() {
+    const m = Math.floor(timerSeconds / 60);
+    const s = String(timerSeconds % 60).padStart(2, '0');
+    recTimer.textContent = `${m}:${s}`;
+  }
+
+  function startWaveform(stream) {
+    audioCtx     = new (window.AudioContext || window.webkitAudioContext)();
+    analyserNode = audioCtx.createAnalyser();
+    analyserNode.fftSize = 256;
+    audioCtx.createMediaStreamSource(stream).connect(analyserNode);
+    const canvas = waveCanvas, ctx = canvas.getContext('2d');
+    const buf = new Uint8Array(analyserNode.frequencyBinCount);
+    function draw() {
+      waveAnimId = requestAnimationFrame(draw);
+      canvas.width  = canvas.offsetWidth  * devicePixelRatio;
+      canvas.height = canvas.offsetHeight * devicePixelRatio;
+      ctx.scale(devicePixelRatio, devicePixelRatio);
+      const W = canvas.offsetWidth, H = canvas.offsetHeight;
+      analyserNode.getByteTimeDomainData(buf);
+      ctx.clearRect(0, 0, W, H);
+      ctx.beginPath();
+      ctx.strokeStyle = '#2E4A3E';
+      ctx.lineWidth = 1.5;
+      const slice = W / buf.length;
+      let x = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const y = ((buf[i] / 128.0) * H) / 2;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        x += slice;
+      }
+      ctx.lineTo(W, H / 2);
+      ctx.stroke();
+    }
+    draw();
+  }
+
+  function stopWaveform() {
+    if (waveAnimId) { cancelAnimationFrame(waveAnimId); waveAnimId = null; }
+    if (audioCtx)   { audioCtx.close(); audioCtx = null; }
+  }
+
+  analyzeBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+    hideError();
+    resultPanel.classList.remove('visible');
+    setLoading(true);
+
+    resetTimeline();
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    let prog = 0;
+    progressWrap.classList.add('visible');
+    const tick = setInterval(() => {
+      prog = Math.min(prog + Math.random() * 12, 88);
+      progressBar.style.width = prog + '%';
+    }, 220);
+
+    try {
+      const res = await fetch(`${BASE_URL}/predict`, { method: 'POST', body: formData });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const data = await res.json();
+
+      clearInterval(tick);
+      progressBar.style.width = '100%';
+      setTimeout(() => {
+        progressWrap.classList.remove('visible');
+        progressBar.style.width = '0%';
+        showResult(data);
+        drawTimeline(data);
+        timelineDot.style.opacity = '0';
+        lastTimelineData = data;
+        startCursorTracking();
+      }, 400);
+    } catch(err) {
+      clearInterval(tick);
+      progressWrap.classList.remove('visible');
+      progressBar.style.width = '0%';
+      showError(err.message || 'Failed to connect to the detection server.');
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  function setLoading(on) {
+    analyzeBtn.disabled = on;
+    analyzeBtn.innerHTML = on
+      ? '<span class="spinner"></span> Analysing…'
+      : 'Analyse Audio';
+  }
+
+  function showResult(data) {
+    const isFake = data.is_fake;
+    const prob   = data.raw_probability;
+    const thresh = data.threshold;
+
+    document.getElementById('verdictBadge').textContent = isFake ? 'FAKE' : 'REAL';
+    document.getElementById('verdictBadge').className   = 'result-verdict-badge ' + (isFake ? 'badge-fake' : 'badge-real');
+    document.getElementById('resultHeadline').textContent = isFake
+      ? 'This audio appears to be AI-generated'
+      : 'This audio appears to be a real human voice';
+    document.getElementById('metricVerdict').textContent = isFake ? 'Fake' : 'Real';
+    document.getElementById('metricConf').textContent    = (isFake ? prob * 100 : (1 - prob) * 100).toFixed(1) + '%';
+    document.getElementById('metricThresh').textContent  = thresh.toFixed(4);
+
+    const fill = document.getElementById('probFill');
+    fill.style.width = (prob * 100).toFixed(1) + '%';
+    fill.className   = 'prob-fill ' + (isFake ? 'fake' : 'real');
+    document.getElementById('probDetail').textContent =
+      `raw probability: ${prob.toFixed(6)}  ·  threshold: ${thresh.toFixed(4)}  ·  decision: ${isFake ? 'FAKE' : 'REAL'}`;
+
+    resultPanel.classList.add('visible');
+    resultPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function resetTimeline() {
+    timelineCanvas.style.display = 'none';
+    timelineLoading.style.display = 'flex';
+    timelineLoading.innerHTML = '<span>Analysing windows…</span>';
+    timelineAxis.innerHTML = '';
+    timelineMeta.textContent = '';
+    timelineDot.style.opacity = '1';
+  }
+
+  function drawTimeline(data) {
+    const points = data.timeline;
+    const dur    = data.duration_sec;
+    if (!points || points.length === 0) return;
+
+    timelineLoading.style.display = 'none';
+    timelineCanvas.style.display  = 'block';
+
+    requestAnimationFrame(() => {
+      const canvas = timelineCanvas;
+      const dpr    = window.devicePixelRatio || 1;
+      const W      = canvas.offsetWidth  || canvas.parentElement.offsetWidth || 600;
+      const H      = canvas.offsetHeight || 110;
+      canvas.width  = W * dpr;
+      canvas.height = H * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const PAD   = { top: 14, bottom: 10, left: 36, right: 6 };
+      const plotW = W - PAD.left - PAD.right;
+      const plotH = H - PAD.top  - PAD.bottom;
+
+      const maxT = Math.max(dur, points[points.length - 1].time_end);
+      const xOf  = t => PAD.left + Math.min(t / maxT, 1) * plotW;
+      const yOf  = p => PAD.top  + plotH * (1 - Math.max(0, Math.min(1, p)));
+
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--cream-mid').trim();
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.font = '9px DM Mono, monospace';
+      ctx.fillStyle = 'rgba(160,157,152,0.9)';
+      ctx.textAlign = 'right';
+      const yLabels = [{ v: 1, label: '100%' }, { v: 0.5, label: '50%' }, { v: 0, label: '0%' }];
+      yLabels.forEach(({ v, label }) => {
+        const y = yOf(v);
+        ctx.fillText(label, PAD.left - 5, y + 3.5);
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(28,26,22,0.06)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 3]);
+        ctx.moveTo(PAD.left, y);
+        ctx.lineTo(W - PAD.right, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+
+      const thrY = yOf(data.threshold);
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = 'rgba(28,26,22,0.28)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(PAD.left, thrY);
+      ctx.lineTo(W - PAD.right, thrY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = '8px DM Mono, monospace';
+      ctx.fillStyle = 'rgba(107,103,96,0.85)';
+      ctx.textAlign = 'right';
+      ctx.fillText('thr', PAD.left - 5, thrY + 3);
+
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        i === 0 ? ctx.moveTo(xOf(p.time_mid), yOf(p.prob)) : ctx.lineTo(xOf(p.time_mid), yOf(p.prob));
+      });
+      ctx.lineTo(xOf(points[points.length - 1].time_mid), PAD.top + plotH);
+      ctx.lineTo(PAD.left, PAD.top + plotH);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(139,32,32,0.08)';
+      ctx.fill();
+
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        i === 0 ? ctx.moveTo(xOf(p.time_mid), yOf(p.prob)) : ctx.lineTo(xOf(p.time_mid), yOf(p.prob));
+      });
+      ctx.strokeStyle = '#8B2020';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      points.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(xOf(p.time_mid), yOf(p.prob), 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = p.is_fake ? '#8B2020' : '#1A4A2E';
+        ctx.fill();
+      });
+
+      const numLabels = Math.min(6, points.length);
+      timelineAxis.innerHTML = '';
+      for (let i = 0; i <= numLabels; i++) {
+        const span = document.createElement('span');
+        span.textContent = ((maxT / numLabels) * i).toFixed(1) + 's';
+        timelineAxis.appendChild(span);
+      }
+      timelineAxis.style.paddingLeft = PAD.left + 'px';
+
+      timelineMeta.textContent = `${points.length} windows · ${data.window_sec}s each`;
+    });
+  }
+
+  function getActiveAudio() {
+    if (activeTab === 'upload' && audioPlayer.src) return audioPlayer;
+    if (activeTab === 'record' && recAudio.src)   return recAudio;
+    return null;
+  }
+
+  function startCursorTracking() {
+    if (cursorRAF) cancelAnimationFrame(cursorRAF);
+    timelineCursor.classList.remove('active');
+
+    function tick() {
+      cursorRAF = requestAnimationFrame(tick);
+      const audio = getActiveAudio();
+      if (!audio || !lastTimelineData || audio.paused) {
+        timelineCursor.classList.remove('active');
+        return;
+      }
+      const dur  = lastTimelineData.duration_sec;
+      const maxT = Math.max(dur, lastTimelineData.timeline[lastTimelineData.timeline.length - 1].time_end);
+      const PAD_LEFT = 36;
+      const plotW    = timelineCanvas.offsetWidth - PAD_LEFT - 6;
+      const frac     = Math.min(audio.currentTime / maxT, 1);
+      timelineCursor.style.left = (PAD_LEFT + frac * plotW) + 'px';
+      timelineCursor.classList.add('active');
+    }
+    tick();
+  }
+
+  function showError(msg) {
+    errorBanner.textContent = '⚠ ' + msg;
+    errorBanner.classList.add('visible');
+  }
+  function hideError() {
+    errorBanner.classList.remove('visible');
+  }
+</script>
+</body>
+</html>
