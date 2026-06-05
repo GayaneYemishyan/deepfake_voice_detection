@@ -1,5 +1,6 @@
 __pycache__/
 .venv/
+.idea/
 .DS_Store
 UI/random_forest.pkl
 UI/xgboost.pkl

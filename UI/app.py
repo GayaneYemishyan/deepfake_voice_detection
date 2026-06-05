@@ -5,10 +5,15 @@ import torch
 import torch.nn as nn
 import joblib
 import librosa
+import librosa.feature
+import librosa.effects
+import librosa.filters
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-
+import warnings
+warnings.filterwarnings('ignore', message='n_fft=.*is too large')
+warnings.filterwarnings('ignore', category=FutureWarning, module='librosa')
 FEATURE_COLS = [
     'spectral_centroid_mean','spectral_centroid_std',
     'spectral_bandwidth_mean','spectral_bandwidth_std',
@@ -93,6 +98,7 @@ class DeepfakeMLP(nn.Module):
 
 DEVICE    = torch.device('cpu')
 scaler    = joblib.load('models/scaler.pkl')
+joblib.dump(scaler, 'models/scaler.pkl')
 q01, q99  = joblib.load('models/clip_bounds.pkl')
 threshold = joblib.load('models/optimal_threshold.pkl')
 
@@ -193,31 +199,23 @@ def feats_to_prob(feats: np.ndarray) -> float:
         return torch.sigmoid(mlp(torch.from_numpy(fs).float().to(DEVICE))).item()
 
 def _batch_feats_to_probs(feature_matrix: np.ndarray) -> np.ndarray:
-    """
-    Run a single batched forward pass for an (N, F) feature matrix.
-    Returns an (N,) numpy array of probabilities.
-    Replaces N serial feats_to_prob calls with one batched inference call,
-    typically 3-8x faster for the window counts used in run_pipeline.
-    """
     mat_clipped = np.clip(feature_matrix, q01, q99)
     mat_scaled  = scaler.transform(mat_clipped).astype(np.float32)
     with torch.no_grad():
         logits = mlp(torch.from_numpy(mat_scaled).to(DEVICE))
         probs  = torch.sigmoid(logits).cpu().numpy()
-    return probs  # shape: (N,)
+    return probs
 
 
 def run_pipeline(audio_path: str) -> dict:
-    """Full predict + timeline on a local audio file. Returns combined dict."""
     y, sr    = load_audio(audio_path)
     duration = len(y) / sr
 
-    # --- overall clip-level prediction (single sample, unchanged) ---
     feats   = extract_features(y, sr)
     prob    = feats_to_prob(feats)
     is_fake = prob >= threshold
 
-    # --- window setup ---
+
     TARGET_WINDOWS = 6
     if duration >= WINDOW_SEC:
         win_sec = WINDOW_SEC
@@ -229,7 +227,6 @@ def run_pipeline(audio_path: str) -> dict:
     win_samples = int(win_sec * sr)
     hop_samples = max(int(hop_sec * sr), 1)
 
-    # --- collect all window feature vectors first, then batch-infer ---
     window_feats, window_metas = [], []
     start = 0
     while start + win_samples <= len(y):
@@ -246,11 +243,10 @@ def run_pipeline(audio_path: str) -> dict:
         })
         start += hop_samples
 
-    # single batched forward pass replaces N serial feats_to_prob calls
     timeline = []
     if window_feats:
-        feature_matrix = np.stack(window_feats)           # (N, F)
-        batch_probs    = _batch_feats_to_probs(feature_matrix)  # (N,)
+        feature_matrix = np.stack(window_feats)
+        batch_probs    = _batch_feats_to_probs(feature_matrix)
         for meta, p in zip(window_metas, batch_probs):
             p = float(p)
             timeline.append({

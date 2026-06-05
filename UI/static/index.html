@@ -598,11 +598,11 @@
     resultPanel.classList.remove('visible');
     recordedChunks = [];
 
-    const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg','']
+    const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg','audio/mp4','']
       .find(m => m === '' || MediaRecorder.isTypeSupported(m));
     mediaRecorder = new MediaRecorder(micStream, mimeType ? { mimeType } : {});
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-    mediaRecorder.onstop = onRecordingStop;
+    mediaRecorder.onstop = () => { analyzeBtn.disabled = true; onRecordingStop(); };
     mediaRecorder.start(100);
 
     timerSeconds = 0;
@@ -640,14 +640,64 @@
     recStatus.classList.remove('active');
   }
 
-  function onRecordingStop() {
+  async function onRecordingStop() {
     const mimeType = mediaRecorder.mimeType || 'audio/webm';
     const blob = new Blob(recordedChunks, { type: mimeType });
-    const ext  = mimeType.includes('ogg') ? 'ogg' : 'webm';
-    selectedFile = new File([blob], `recording.${ext}`, { type: mimeType });
-    recAudio.src = URL.createObjectURL(blob);
+    const objectUrl = URL.createObjectURL(blob);
+    recAudio.src = objectUrl;
     recPlayback.classList.add('visible');
+
+    // Convert to WAV via Web Audio API so the server never needs ffmpeg
+    try {
+      const arrayBuf = await blob.arrayBuffer();
+      const audioCtx = new AudioContext({ sampleRate: 16000 });
+      const decoded  = await audioCtx.decodeAudioData(arrayBuf);
+      audioCtx.close();
+
+      // Render to mono Float32
+      const numCh      = decoded.numberOfChannels;
+      const length     = decoded.length;
+      const samples    = new Float32Array(length);
+      for (let c = 0; c < numCh; c++) {
+        const ch = decoded.getChannelData(c);
+        for (let i = 0; i < length; i++) samples[i] += ch[i];
+      }
+      for (let i = 0; i < length; i++) samples[i] /= numCh;
+
+      // Encode as 16-bit PCM WAV
+      const wavBuf = encodeWav(samples, 16000);
+      selectedFile = new File([wavBuf], 'recording.wav', { type: 'audio/wav' });
+    } catch (e) {
+      // Fallback: send original blob if Web Audio decoding fails
+      console.warn('WAV conversion failed, sending original:', e);
+      const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
+      selectedFile = new File([blob], `recording.${ext}`, { type: mimeType });
+    }
     analyzeBtn.disabled = false;
+  }
+
+  function encodeWav(samples, sampleRate) {
+    const buf    = new ArrayBuffer(44 + samples.length * 2);
+    const view   = new DataView(buf);
+    const write  = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
+    const clamp  = v => Math.max(-1, Math.min(1, v));
+    write(0, 'RIFF');
+    view.setUint32(4,  36 + samples.length * 2, true);
+    write(8, 'WAVE');
+    write(12, 'fmt ');
+    view.setUint32(16, 16, true);        // chunk size
+    view.setUint16(20, 1,  true);        // PCM
+    view.setUint16(22, 1,  true);        // mono
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true); // byte rate
+    view.setUint16(32, 2,  true);        // block align
+    view.setUint16(34, 16, true);        // bits per sample
+    write(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+    let off = 44;
+    for (let i = 0; i < samples.length; i++, off += 2)
+      view.setInt16(off, clamp(samples[i]) * 0x7FFF, true);
+    return buf;
   }
 
   recDiscard.addEventListener('click', () => {
@@ -721,7 +771,14 @@
 
     try {
       const res = await fetch(`${BASE_URL}/predict`, { method: 'POST', body: formData });
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      if (!res.ok) {
+        let errMsg = `Server error ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData.error) errMsg = `⚠ ${errData.error}`;
+        } catch(_) {}
+        throw new Error(errMsg);
+      }
       const data = await res.json();
 
       clearInterval(tick);
